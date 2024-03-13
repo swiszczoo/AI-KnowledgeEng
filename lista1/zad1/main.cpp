@@ -40,7 +40,7 @@ bool read_data()
     std::string line;
     std::getline(file, line);
 
-    float fix_longitude = cos(51.08);
+    float fix_longitude = cos(51.08 / 180.0 * 3.141592653589);
 
     char buffer[1024];
     while (!file.eof()) {
