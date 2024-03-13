@@ -1,5 +1,7 @@
 #include "astar.h"
+#include "utils.h"
 
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -9,8 +11,8 @@
 
 static std::vector<graph_edge> edges;
 
-static int time_to_int(char* buffer) {
-    if (strlen(buffer) != 8) {
+static int time_to_int(const char* buffer) {
+    if (strlen(buffer) < 8) {
         return 0;
     }
 
@@ -104,6 +106,11 @@ void hash_stop_ids()
     }
 }
 
+void output_stop_ids()
+{
+    std::ofstream file("stops.txt");
+}
+
 int main()
 {
 #ifdef _WIN32
@@ -120,6 +127,73 @@ int main()
     std::cout << "Hashowanie nazw przystankow..." << std::endl;
     hash_stop_ids();
 
-    astar_compute(edges, 555, 641, true, 8 * 3600);
+    astar algorithm(edges);
+    algorithm.preprocess();
+    algorithm.output_stop_names();
+
+    int start_stop_id, end_stop_id, start_stop_time;
+    char temp;
+    std::string temp_str;
+
+    std::cout << "Podaj ID przystanku poczatkowego [plik stops.txt]: >";
+    std::cin >> start_stop_id;
+    std::cout << "Podaj ID przystanku koncowego [plik stops.txt]: >";
+    std::cin >> end_stop_id;
+    std::cout << "Optymalizacja czasu czy przesiadek [t/p]: >";
+    std::cin >> temp;
+    bool optimize_time = temp == 't';
+    std::cout << "Czas pojawienia sie na przystanku poczatkowym [HH:MM]: >";
+    std::cin >> temp_str;
+    temp_str += ":00";
+    start_stop_time = time_to_int(temp_str.c_str());
+
+    auto time1 = std::chrono::steady_clock::now();
+    astar::result result;
+    result.total_cost = std::numeric_limits<decltype(result.total_cost)>().max();
+
+    if (optimize_time) {
+        result = algorithm.compute(
+            start_stop_id, end_stop_id, optimize_time, start_stop_time);
+    }
+    else {
+        for (auto& line : algorithm.get_lines_at_stop(start_stop_id)) {
+            std::cout << "Uruchamianie dla linii " << line << "..." << std::endl;
+
+            auto new_result = algorithm.compute(
+                start_stop_id, end_stop_id, optimize_time, start_stop_time, line);
+
+            if (new_result.total_cost < result.total_cost) {
+                result = std::move(new_result);
+            }
+        }
+    }
+    auto time2 = std::chrono::steady_clock::now();
+
+    std::cout << "Czas wykonywania algorytmu: "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(time2 - time1)
+        << std::endl;
+
+    if (!result.success) {
+        std::cout << "Nie znaleziono rozwiazania!" << std::endl;
+        return 0;
+    }
+
+    std::cout << "Rozwiazanie:" << std::endl;
+    std::cout << "Podroz z " << result.start_stop
+        << " do " << result.end_stop
+        << ", o godzinie " << time_to_str(result.start_stop_time)
+        << std::endl;
+    std::cout << "Czas dotarcia: " << time_to_str(result.end_arrival_time)
+        << ", Przesiadki: " << result.total_vehicle_changes << std::endl;
+    std::cout << "Funkcja kosztu: " << result.total_cost << std::endl;
+
+    for (auto& stage : result.stages) {
+        std::cout << "Linia " << stage.line << ": " << std::endl;
+        std::cout << " - Wsiadz na przystanku " << stage.start_stop << std::endl;
+        std::cout << " - Godzina: " << time_to_str(stage.onboard_time) << std::endl;
+        std::cout << " - Wysiadz na przystanku " << stage.end_stop << std::endl;
+        std::cout << " - Godzina: " << time_to_str(stage.offboard_time) << std::endl;
+    }
+
     return 0;
 }
