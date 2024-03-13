@@ -106,11 +106,6 @@ void hash_stop_ids()
     }
 }
 
-void output_stop_ids()
-{
-    std::ofstream file("stops.txt");
-}
-
 int main()
 {
 #ifdef _WIN32
