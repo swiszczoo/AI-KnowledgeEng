@@ -134,9 +134,10 @@ int main()
     std::cin >> start_stop_id;
     std::cout << "Podaj ID przystanku koncowego [plik stops.txt]: >";
     std::cin >> end_stop_id;
-    std::cout << "Optymalizacja czasu czy przesiadek [t/p]: >";
+    std::cout << "Optymalizacja Dijkstra czy A* czas czy A* przesiadki [d/t/p]: >";
     std::cin >> temp;
-    bool optimize_time = temp == 't';
+    bool dijkstra = temp == 'd';
+    bool optimize_time = dijkstra || temp == 't';
     std::cout << "Czas pojawienia sie na przystanku poczatkowym [HH:MM]: >";
     std::cin >> temp_str;
     temp_str += ":00";
@@ -147,8 +148,14 @@ int main()
     result.total_cost = std::numeric_limits<decltype(result.total_cost)>().max();
 
     if (optimize_time) {
-        result = algorithm.compute(
-            start_stop_id, end_stop_id, optimize_time, start_stop_time);
+        if (dijkstra) {
+            result = algorithm.compute_dijkstra(
+                start_stop_id, end_stop_id, start_stop_time);
+        }
+        else {
+            result = algorithm.compute(
+                start_stop_id, end_stop_id, optimize_time, start_stop_time);
+        }
     }
     else {
         for (auto& line : algorithm.get_lines_at_stop(start_stop_id)) {

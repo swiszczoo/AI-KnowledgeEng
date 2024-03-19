@@ -48,6 +48,8 @@ public:
     void preprocess();
     void output_stop_names();
     std::unordered_set<std::string> get_lines_at_stop(int stop_id) const;
+    result compute_dijkstra(int start_stop_id, int end_stop_id,
+        int start_stop_time);
     result compute(int start_stop_id, int end_stop_id,
         bool optimize_time, int start_stop_time, std::string start_line = "");
 
@@ -79,6 +81,9 @@ private:
     std::uint64_t compute_heuristics(node_info& current, node_info& destination) const;
     std::tuple<std::uint64_t, single_edge*, bool> travel_cost(bool optimize_time,
         node_info& current, timetable_edge& next, const std::string& current_line) const;
+
+    result construct_result(int start_stop_id, int end_stop_id,
+        bool optimize_time, int start_stop_time) const;
 
     const std::vector<graph_edge>& _edges;
     float _max_velocity;

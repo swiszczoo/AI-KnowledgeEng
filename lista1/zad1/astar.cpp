@@ -229,6 +229,85 @@ std::unordered_set<std::string> astar::get_lines_at_stop(int stop_id) const
     return out;
 }
 
+auto astar::compute_dijkstra(int start_stop_id, int end_stop_id,
+    int start_stop_time) -> result
+{
+    result result;
+    result.success = false;
+
+    if (start_stop_id <= 0 || start_stop_id >= _nodes.size()
+        || end_stop_id <= 0 || end_stop_id >= _nodes.size()
+        || start_stop_id == end_stop_id) {
+
+        return result;
+    }
+
+    std::cout << "Uruchamianie algorytmu Dijkstry..." << std::endl;
+    for (auto& node : _nodes) {
+        node.current_cost = node.total_cost = -1ULL;
+    }
+
+    _nodes[start_stop_id].current_cost = start_stop_time;
+    _nodes[start_stop_id].estimated_cost = 0;
+    _nodes[start_stop_id].total_cost
+        = _nodes[start_stop_id].current_cost + _nodes[start_stop_id].estimated_cost;
+    _nodes[start_stop_id].previous_edge = nullptr;
+    _nodes[start_stop_id].previous_node = 0;
+    _nodes[start_stop_id].veh_change_count = 0;
+
+    std::priority_queue<std::pair<int, int>> open_nodes;
+    open_nodes.push(std::make_pair(-_nodes[start_stop_id].current_cost, start_stop_id));
+
+    bool found_solution = false;
+    while (!open_nodes.empty()) {
+        auto [pq_cost, node_id] = open_nodes.top();
+        open_nodes.pop();
+
+        if (node_id == end_stop_id) {
+            std::cout << "Znaleziono rozwiazanie: "
+                << time_to_str(std::get<ARRIVAL>(*_nodes[end_stop_id].previous_edge))
+                << ", przesiadki: " << (_nodes[end_stop_id].veh_change_count - 1)
+                << std::endl;
+            found_solution = true;
+        }
+
+        if (pq_cost != -_nodes[node_id].current_cost) {
+            continue;
+        }
+
+        for (auto& neighbor : _nodes[node_id].neighbors) {
+            int next_node_id = neighbor.destination;
+
+            std::string current_line = "";
+            if (_nodes[node_id].previous_edge) {
+                current_line = std::get<LINE_NAME>(*_nodes[node_id].previous_edge);
+            }
+
+            auto&& [travel_cost, edge_ptr, vehicle_change]
+                = this->travel_cost(true, _nodes[node_id], neighbor, current_line);
+
+            bool better_route_found = _nodes[next_node_id].current_cost > travel_cost;
+            if (edge_ptr && better_route_found) {
+                _nodes[next_node_id].current_cost = travel_cost;
+                _nodes[next_node_id].total_cost = _nodes[next_node_id].current_cost;
+                _nodes[next_node_id].previous_node = node_id;
+                _nodes[next_node_id].previous_edge = edge_ptr;
+                _nodes[next_node_id].veh_change_count
+                    = _nodes[node_id].veh_change_count + vehicle_change;
+
+                open_nodes.emplace(
+                    std::make_pair(-_nodes[next_node_id].current_cost, next_node_id));
+            }
+        }
+    }
+
+    if (!found_solution) {
+        return result;
+    }
+
+    return construct_result(start_stop_id, end_stop_id, true, start_stop_time);
+}
+
 auto astar::compute(int start_stop_id, int end_stop_id,
     bool optimize_time, int start_stop_time, std::string start_line) -> result
 {
@@ -340,6 +419,14 @@ auto astar::compute(int start_stop_id, int end_stop_id,
     if (!found_solution) {
         return result;
     }
+
+    return construct_result(start_stop_id, end_stop_id, optimize_time, start_stop_time);
+}
+
+auto astar::construct_result(int start_stop_id, int end_stop_id,
+    bool optimize_time, int start_stop_time) const -> result
+{
+    result result;
 
     result.success = true;
     result.start_stop = _nodes[start_stop_id].stop_name;
