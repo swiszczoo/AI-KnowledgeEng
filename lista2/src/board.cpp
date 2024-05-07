@@ -16,13 +16,41 @@ inline std::pair<A, B> operator*(const std::pair<A, B>& first, int scalar)
     return { scalar * first.first, scalar * first.second };
 }
 
+static const int camp_map[16][16] = {
+    { 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, },
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, },
+};
+
 board::board()
+    : _metric([](move m) -> float { return std::abs(m.x1 - m.x2) + std::abs(m.y1 - m.y2); })
+    , _player_one_ok_pieces(0)
+    , _player_two_ok_pieces(0)
+    , _heuristic(0)
 {
     for (int x = 0; x < BOARD_SIZE; ++x) {
         for (int y = 0; y < BOARD_SIZE; ++y) {
             _pieces[x][y] = 0;
         }
     }
+}
+
+void board::set_metric(std::function<float(move)> metric)
+{
+    _metric = metric;
 }
 
 void board::set_piece(int x, int y, int player)
@@ -33,8 +61,26 @@ void board::set_piece(int x, int y, int player)
     remove_piece(x, y);
     _pieces[x][y] = player;
 
-    if (player == 1) _player_one_pieces.push_back({ x, y });
-    else if (player == 2) _player_two_pieces.push_back({ x, y });
+    if (player == 1) {
+        _player_one_pieces.push_back({ x, y });
+
+        if (camp_map[x][y] == 1) {
+            ++_player_one_ok_pieces;
+        }
+
+        // The farther I am, the worse my position is
+        _heuristic -= _metric(move{ 0, 0, x, y });
+    }
+    else if (player == 2) {
+        _player_two_pieces.push_back({ x, y });
+
+        if (camp_map[x][y] == 2) {
+            ++_player_one_ok_pieces;
+        }
+
+        // The farther my opponent is, the better my position is
+        _heuristic += _metric(move{ 0, 0, x, y });
+    }
 }
 
 void board::remove_piece(int x, int y)
@@ -46,6 +92,12 @@ void board::remove_piece(int x, int y)
                 break;
             }
         }
+
+        if (camp_map[x][y] == 1) {
+            --_player_one_ok_pieces;
+        }
+
+        _heuristic += _metric(move{ 0, 0, x, y });
     }
     else if (_pieces[x][y] == 2) {
         for (auto it = _player_two_pieces.begin(); it != _player_two_pieces.end(); ++it) {
@@ -54,6 +106,12 @@ void board::remove_piece(int x, int y)
                 break;
             }
         }
+
+        if (camp_map[x][y] == 2) {
+            --_player_two_ok_pieces;
+        }
+
+        _heuristic -= _metric(move{ 0, 0, x, y });
     }
 
     _pieces[x][y] = 0;
@@ -68,10 +126,24 @@ void board::move_piece(int x1, int y1, int x2, int y2)
     if (_pieces[x1][y1] == 1) {
         it = _player_one_pieces.begin();
         end_it = _player_one_pieces.end();
+
+        if (camp_map[x1][y1] == 1) {
+            --_player_one_ok_pieces;
+        }
+
+        _heuristic += _metric(move{ 0, 0, x1, y1 });
+        _heuristic -= _metric(move{ 0, 0, x2, y2 });
     }
     else if (_pieces[x1][y1] == 2) {
         it = _player_two_pieces.begin();
         end_it = _player_two_pieces.end();
+
+        if (camp_map[x1][y1] == 2) {
+            --_player_two_ok_pieces;
+        }
+
+        _heuristic -= _metric(move{ 0, 0, x1, y1 });
+        _heuristic += _metric(move{ 0, 0, x2, y2 });
     }
 
     for (; it != end_it; ++it) {
@@ -83,6 +155,14 @@ void board::move_piece(int x1, int y1, int x2, int y2)
 
     _pieces[x2][y2] = _pieces[x1][y1];
     _pieces[x1][y1] = 0;
+
+    if (camp_map[x2][y2] == 1 && _pieces[x2][y2] == 1) {
+        ++_player_one_ok_pieces;
+    }
+
+    if (camp_map[x2][y2] == 2 && _pieces[x2][y2] == 2) {
+        ++_player_two_ok_pieces;
+    }
 }
 
 static const auto single_moves = std::array{
@@ -137,6 +217,23 @@ auto board::get_legal_moves(int player) const -> std::vector<move>
     }
 
     return moves;
+}
+
+int board::get_winner() const
+{
+    if (_player_one_ok_pieces == _player_one_pieces.size()) return 1;
+    if (_player_two_ok_pieces == _player_two_pieces.size()) return 2;
+
+    return 0;
+}
+
+int board::get_heuristic() const
+{
+    int winner = get_winner();
+    if (winner == 1) return INT_MAX;
+    else if (winner == 2) return INT_MIN;
+
+    return _heuristic;
 }
 
 void board::rec_add_jump_moves(std::vector<move>& out,
