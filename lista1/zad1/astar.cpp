@@ -124,7 +124,7 @@ auto astar::travel_cost(bool optimize_time, node_info& current, timetable_edge& 
 
     int vehicle_change_cost = optimize_time ? 1 : VEHICLE_CHANGE_COST;
 
-    // Perform bin-search to find nearest destination time
+    // Perform bin-search to find nearest departure time
     int start = 0;
     int end = next.times.size();
 
