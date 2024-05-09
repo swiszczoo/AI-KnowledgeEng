@@ -36,10 +36,12 @@ static const int camp_map[16][16] = {
 };
 
 board::board()
-    : _metric([](move m) -> float { return std::abs(m.x1 - m.x2) + std::abs(m.y1 - m.y2); })
+    : _metric_one([](move m) -> std::int64_t { return std::abs(m.x1 - m.x2) + std::abs(m.y1 - m.y2); })
+    , _metric_two([](move m) -> std::int64_t { return std::abs(m.x1 - m.x2) + std::abs(m.y1 - m.y2); })
     , _player_one_ok_pieces(0)
     , _player_two_ok_pieces(0)
-    , _heuristic(0)
+    , _heuristic_one(0)
+    , _heuristic_two(0)
 {
     for (int x = 0; x < BOARD_SIZE; ++x) {
         for (int y = 0; y < BOARD_SIZE; ++y) {
@@ -48,9 +50,14 @@ board::board()
     }
 }
 
-void board::set_metric(std::function<float(move)> metric)
+void board::set_metric_one(std::function<int64_t(move)> metric)
 {
-    _metric = metric;
+    _metric_one = metric;
+}
+
+void board::set_metric_two(std::function<int64_t(move)> metric)
+{
+    _metric_two = metric;
 }
 
 void board::set_piece(int x, int y, int player)
@@ -69,7 +76,8 @@ void board::set_piece(int x, int y, int player)
         }
 
         // The farther I am, the worse my position is
-        _heuristic -= _metric(move{ 0, 0, x, y });
+        _heuristic_one -= _metric_one(move{ 0, 0, x, y });
+        _heuristic_two -= _metric_two(move{ 0, 0, x, y });
     }
     else if (player == 2) {
         _player_two_pieces.push_back({ x, y });
@@ -79,8 +87,15 @@ void board::set_piece(int x, int y, int player)
         }
 
         // The farther my opponent is, the better my position is
-        _heuristic += _metric(move{ 0, 0, x, y });
+        _heuristic_one += _metric_one(move{ BOARD_SIZE - 1, BOARD_SIZE - 1, x, y });
+        _heuristic_two += _metric_two(move{ BOARD_SIZE - 1, BOARD_SIZE - 1, x, y });
     }
+}
+
+int board::get_piece(int x, int y) const
+{
+    assert(x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE);
+    return _pieces[x][y];
 }
 
 void board::remove_piece(int x, int y)
@@ -97,7 +112,8 @@ void board::remove_piece(int x, int y)
             --_player_one_ok_pieces;
         }
 
-        _heuristic += _metric(move{ 0, 0, x, y });
+        _heuristic_one += _metric_one(move{ 0, 0, x, y });
+        _heuristic_two += _metric_two(move{ 0, 0, x, y });
     }
     else if (_pieces[x][y] == 2) {
         for (auto it = _player_two_pieces.begin(); it != _player_two_pieces.end(); ++it) {
@@ -111,7 +127,8 @@ void board::remove_piece(int x, int y)
             --_player_two_ok_pieces;
         }
 
-        _heuristic -= _metric(move{ 0, 0, x, y });
+        _heuristic_one -= _metric_one(move{ BOARD_SIZE - 1, BOARD_SIZE - 1, x, y });
+        _heuristic_two -= _metric_two(move{ BOARD_SIZE - 1, BOARD_SIZE - 1, x, y });
     }
 
     _pieces[x][y] = 0;
@@ -131,8 +148,10 @@ void board::move_piece(int x1, int y1, int x2, int y2)
             --_player_one_ok_pieces;
         }
 
-        _heuristic += _metric(move{ 0, 0, x1, y1 });
-        _heuristic -= _metric(move{ 0, 0, x2, y2 });
+        _heuristic_one += _metric_one(move{ 0, 0, x1, y1 });
+        _heuristic_two += _metric_two(move{ 0, 0, x1, y1 });
+        _heuristic_one -= _metric_one(move{ 0, 0, x2, y2 });
+        _heuristic_two -= _metric_two(move{ 0, 0, x2, y2 });
     }
     else if (_pieces[x1][y1] == 2) {
         it = _player_two_pieces.begin();
@@ -142,8 +161,10 @@ void board::move_piece(int x1, int y1, int x2, int y2)
             --_player_two_ok_pieces;
         }
 
-        _heuristic -= _metric(move{ 0, 0, x1, y1 });
-        _heuristic += _metric(move{ 0, 0, x2, y2 });
+        _heuristic_one -= _metric_one(move{ BOARD_SIZE - 1, BOARD_SIZE - 1, x1, y1 });
+        _heuristic_two -= _metric_two(move{ BOARD_SIZE - 1, BOARD_SIZE - 1, x1, y1 });
+        _heuristic_one += _metric_one(move{ BOARD_SIZE - 1, BOARD_SIZE - 1, x2, y2 });
+        _heuristic_two += _metric_two(move{ BOARD_SIZE - 1, BOARD_SIZE - 1, x2, y2 });
     }
 
     for (; it != end_it; ++it) {
@@ -163,6 +184,11 @@ void board::move_piece(int x1, int y1, int x2, int y2)
     if (camp_map[x2][y2] == 2 && _pieces[x2][y2] == 2) {
         ++_player_two_ok_pieces;
     }
+}
+
+void board::undo_move(int x1, int y1, int x2, int y2)
+{
+    move_piece(x2, y2, x1, y1);
 }
 
 static const auto single_moves = std::array{
@@ -227,13 +253,47 @@ int board::get_winner() const
     return 0;
 }
 
-int board::get_heuristic() const
+std::int64_t board::get_heuristic_one() const
 {
     int winner = get_winner();
-    if (winner == 1) return INT_MAX;
-    else if (winner == 2) return INT_MIN;
+    if (winner == 1) return LLONG_MAX;
+    else if (winner == 2) return LLONG_MIN;
 
-    return _heuristic;
+    return _heuristic_one;
+}
+
+std::int64_t board::get_heuristic_two() const
+{
+    int winner = get_winner();
+    if (winner == 1) return LLONG_MAX;
+    else if (winner == 2) return LLONG_MIN;
+
+    return _heuristic_two;
+}
+
+std::uint64_t board::hash_position() const
+{
+    std::uint64_t result = 0;
+    std::uint64_t multiplicand = 1;
+
+    for (int x = 0; x < BOARD_SIZE; ++x) {
+        for (int y = 0; y < BOARD_SIZE; ++y) {
+            result += multiplicand * static_cast<std::uint64_t>(_pieces[x][y]);
+            multiplicand *= 3;
+        }
+    }
+
+    return result;
+}
+
+void board::copy_position(std::uint8_t out[BOARD_SIZE][BOARD_SIZE])
+{
+    std::memcpy(out, _pieces, sizeof(_pieces));
+}
+
+bool board::compare_position(std::uint8_t in[BOARD_SIZE][BOARD_SIZE])
+{
+    return std::memcmp(in, _pieces, sizeof(_pieces)) == 0;
 }
 
 void board::rec_add_jump_moves(std::vector<move>& out,
