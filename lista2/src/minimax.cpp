@@ -15,10 +15,13 @@ void minimax::set_depth(int depth)
     _depth = depth;
 }
 
-void minimax::make_next_move(board& board)
+int minimax::make_next_move(board& board)
 {
-    auto move = get_best_move(board);
+    int nodes = 0;
+    auto move = get_best_move(board, nodes);
     board.move_piece(move);
+
+    return nodes;
 }
 
 std::int64_t minimax::get_heuristic(const board& board)
@@ -35,7 +38,7 @@ static inline int next_player(int player)
     return player == 1 ? 2 : 1;
 }
 
-board::move minimax::get_best_move(board& board)
+board::move minimax::get_best_move(board& board, int& nodes)
 {
     auto moves = board.get_legal_moves(_player);
     std::int64_t best_move_score = LLONG_MIN;
@@ -44,7 +47,7 @@ board::move minimax::get_best_move(board& board)
     for (auto& move : moves) {
  
         board.move_piece(move);
-        auto score = alphabeta_rec(board, _player, _depth - 1, LLONG_MIN, LLONG_MAX);
+        auto score = alphabeta_rec(board, nodes, _player, _depth - 1, LLONG_MIN, LLONG_MAX);
 
         if (best_move_score == LLONG_MIN || score > best_move_score) {
             best_moves.clear();
@@ -65,18 +68,21 @@ board::move minimax::get_best_move(board& board)
     return best_moves[dist(mt)];
 }
 
-std::int64_t minimax::alphabeta_rec(board& board, int player, int depth_left,
+std::int64_t minimax::alphabeta_rec(board& board, int& nodes, int player, int depth_left,
     std::int64_t alpha, std::int64_t beta)
 {
+    ++nodes; // Increase visited nodes counter
+
     if (depth_left <= 0 || board.get_winner()) {
         return get_heuristic(board);
     }
 
     auto moves = board.get_legal_moves(player);
-    if (player != _player) {
+    if (player != _player) { // If that's our move
         for (auto& move : moves) {
             board.move_piece(move);
-            beta = std::min(beta, alphabeta_rec(board, next_player(player), depth_left - 1, alpha, beta));
+            beta = std::min(beta, alphabeta_rec(board, nodes,
+                next_player(player), depth_left - 1, alpha, beta));
             board.undo_move(move);
             if (alpha >= beta) {
                 break;
@@ -85,10 +91,11 @@ std::int64_t minimax::alphabeta_rec(board& board, int player, int depth_left,
 
         return beta;
     }
-    else {
+    else { // If that's our opponent's move
         for (auto& move : moves) {
             board.move_piece(move);
-            alpha = std::max(alpha, alphabeta_rec(board, next_player(player), depth_left - 1, alpha, beta));
+            alpha = std::max(alpha, alphabeta_rec(board, nodes,
+                next_player(player), depth_left - 1, alpha, beta));
             board.undo_move(move);
             if (alpha >= beta) {
                 break;

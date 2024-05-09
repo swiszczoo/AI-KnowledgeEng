@@ -22,7 +22,7 @@ static std::int64_t third_strategy(board::move m)
 
 int main() {
     board brd;
-    brd.set_metric_one(first_strategy);
+    brd.set_metric_one(third_strategy);
     brd.set_metric_two(third_strategy);
 
     for (int y = 0; y < BOARD_SIZE; ++y) {
@@ -36,18 +36,21 @@ int main() {
     auto moves = brd.get_legal_moves(1);
 
     minimax player1(1, 1);
-    player1.set_depth(4);
+    player1.set_depth(3);
     minimax player2(2, 2);
-    player2.set_depth(4);
+    player2.set_depth(3);
 
     auto start = std::chrono::steady_clock::now();
 
     int turn_counter = 0;
+    std::uint64_t total_nodes = 0;
     while (!brd.get_winner()) {
-        player1.make_next_move(brd);
+        int nodes = 0;
+        nodes += player1.make_next_move(brd);
         if (brd.get_winner()) continue;
-        player2.make_next_move(brd);
-        std::cerr << "Zakonczono ture " << (++turn_counter) << std::endl;
+        nodes += player2.make_next_move(brd);
+        std::cerr << "Zakonczono ture " << (++turn_counter) << ", wezly: " << nodes << std::endl;
+        total_nodes += nodes;
     }
 
     for (int y = 0; y < BOARD_SIZE; ++y) {
@@ -68,5 +71,6 @@ int main() {
     std::cerr << "Czas: "
         << std::chrono::duration_cast<std::chrono::milliseconds>(duration)
         << std::endl;
+    std::cerr << "Odwiedzone wezly: " << total_nodes << std::endl;
     return 0;
 }
